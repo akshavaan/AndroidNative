@@ -1,0 +1,48 @@
+name: Android Play Store Release
+
+on:
+  push:
+    branches:
+      - main  # Run on pushes to the main branch
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  release:
+    name: Build & Upload to Play Store
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Grant execute permissions to Gradle
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Sign APK
+        env:
+          SIGNING_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        run: |
+          echo "${SIGNING_KEYSTORE}" | base64 --decode > app/keystore.jks
+          ./gradlew signingReport
+          ./gradlew bundleRelease
+
+      - name: Upload to Google Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.GOOGLE_PLAY_JSON }}
+          packageName: com.vaas.nativeandroid # Change this to your app’s package name
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          track: production
+          status: completed
